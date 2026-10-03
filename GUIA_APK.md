@@ -103,6 +103,29 @@ Conviene probarlo una vez, así sabés que quedó bien:
 | No veo "Releases" | La compilación aún no terminó o falló. Mirá **Actions**. |
 | Play Protect bloquea | Tocá *Más detalles → Instalar de todos modos*. |
 
+---
+
+## Seguridad: quién puede actualizar tu app
+
+**Solo vos (y Claude, mientras le des acceso a tu repositorio) pueden publicar actualizaciones que tu teléfono acepte.**
+
+Cómo está protegida:
+- **Cada actualización va firmada con tu clave** (la de `CLAVE_DE_FIRMA.txt`, guardada en el Secret `KEYSTORE_BASE64`). La app trae la parte pública de esa clave y **rechaza cualquier actualización que no esté firmada con ella**, aunque esté publicada en tu repositorio.
+- **El paquete viaja cifrado** y el teléfono comprueba su huella (SHA-256) con tu clave antes de instalarlo. Si alguien cambia un solo byte, no se instala.
+- **Solo se descarga desde tu repositorio**: la app no acepta enlaces a otros sitios.
+- **El APK también va firmado con tu clave**: Android no deja instalar encima uno firmado con otra.
+- **APK de producción**: no se puede inspeccionar la app conectando el teléfono por cable.
+- **Sin estadísticas a terceros**: el plugin de actualizaciones ya no avisa a sus servidores cuando abrís la app.
+- **Respaldos seguros**: si alguien te manda un archivo de respaldo armado a propósito, la app descarta todo lo que no sea un dato válido; no puede meter código.
+- **Bloqueo de envíos**: la app no puede cargar código ni mandar datos a sitios externos (solo consulta GitHub para buscar actualizaciones).
+- **Recetas y librerías fijadas**: la compilación usa versiones exactas de todo, así que una librería alterada no se cuela.
+
+Lo que depende de vos (muy importante):
+1. **Activá la verificación en dos pasos en GitHub**: Settings → Password and authentication → Two-factor authentication. Es lo que impide que alguien que adivine tu contraseña publique en tu repositorio.
+2. **Cuidá `CLAVE_DE_FIRMA.txt`**: es la llave maestra de la app. Guardala en un lugar privado (por ejemplo tu Drive) y no la compartas. Si se pierde, no se pueden publicar más actualizaciones; si alguien la consigue, avisá y se cambia.
+3. **No agregues colaboradores** al repositorio salvo que confíes plenamente en ellos (Settings → Collaborators).
+4. Para quitarle el acceso a Claude cuando quieras: GitHub → Settings → Applications → Claude → elegí qué repositorios puede ver.
+
 ## Alternativa: Android Studio (sin actualizaciones automáticas)
 Si preferís armar el APK en tu compu: instalá **Node.js (LTS)** y **Android Studio**, y en la carpeta del proyecto ejecutá:
 ```bash

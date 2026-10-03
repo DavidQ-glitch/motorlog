@@ -4,7 +4,8 @@
   "webDir": "www",
   "backgroundColor": "#0f172a",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
   },
   "plugins": {
     "SplashScreen": {
@@ -19,7 +20,11 @@
       "backgroundColor": "#0f172a"
     },
     "CapacitorUpdater": {
-      "autoUpdate": false
+      "autoUpdate": false,
+      "statsUrl": "",
+      "channelUrl": "",
+      "updateUrl": "",
+      "publicKey": "-----BEGIN RSA PUBLIC KEY-----\nMIIBCgKCAQEA89CZh0wCoC4gE4JPlAFXlmQJrEv8AdJrtgbC6tYPP0CHWvyFGjHU\nmyxNgWeQitwnPEgozEB7vPXBN15PoUbPLbE8Q112TLrXnARMdVmYQpnZpqnJxCcA\nAQR9jNCmCZbnHJEeRx2c/mvflDY717GhAUI0EK+rXnINGk0L/bvZFnrTNxf2jFez\nKa6hL2bx93CIzSuJPU1zVgestl7veYmT47Bz7k+95UK27HIkJcOPqr7eI/okDUwe\nckVs07GIT8w4gcoVXB6tB7p37ZjMGw8MtX7+1tqeaegrd4a3wn5eCq5i/3CvKx18\nq6ysb6AA1mSSaNucYkcQ/950JzXNKbo5KQIDAQAB\n-----END RSA PUBLIC KEY-----"
     }
   }
 }

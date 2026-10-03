@@ -1,12 +1,18 @@
 name: Construir APK y publicar actualización
 
+# Solo corre cuando alguien con permiso de escritura sube cambios a "main" (vos, o Claude con tu autorización).
+# Los "fork" o pedidos de cambio de terceros NO disparan esta receta ni tienen acceso a la clave.
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write   # necesario para publicar el Release con el APK
+
+concurrency:
+  group: publicar-motorlog
+  cancel-in-progress: false
 
 jobs:
   apk:
@@ -15,49 +21,66 @@ jobs:
       BUILD: ${{ github.run_number }}
       COMMIT_MSG: ${{ github.event.head_commit.message }}
     steps:
-      - uses: actions/checkout@v4
+      # Herramientas fijadas por huella exacta (no pueden cambiar por debajo)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Preparar la clave de firma (Secret KEYSTORE_BASE64)
+      - name: Preparar la clave de firma y comprobar que es la tuya
         env:
           KS: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KS" ]; then
-            echo "::error title=Falta la clave de firma::Creá el Secret KEYSTORE_BASE64 (Settings > Secrets and variables > Actions) con el contenido de CLAVE_DE_FIRMA.txt. Mirá el paso 3 de la guía."
+            echo "::error title=Falta la clave de firma::Creá el Secret KEYSTORE_BASE64 (Settings > Secrets and variables > Actions) con el contenido de CLAVE_DE_FIRMA.txt."
             exit 1
           fi
-          mkdir -p ~/.android
+          mkdir -p ~/.android "$RUNNER_TEMP/firma" && chmod 700 "$RUNNER_TEMP/firma"
           echo "$KS" | tr -d '[:space:]' | base64 -d > ~/.android/debug.keystore
           keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey > /dev/null \
             || { echo "::error title=Clave de firma inválida::El Secret KEYSTORE_BASE64 no se pudo leer. Pegá de nuevo el contenido completo de CLAVE_DE_FIRMA.txt."; exit 1; }
+          K="$RUNNER_TEMP/firma/key.pem"
+          openssl pkcs12 -in ~/.android/debug.keystore -passin pass:android -nocerts -nodes -out "$K" 2>/dev/null \
+            || openssl pkcs12 -legacy -in ~/.android/debug.keystore -passin pass:android -nocerts -nodes -out "$K"
+          chmod 600 "$K"
+          # La clave pública guardada en la app tiene que coincidir con la del Secret
+          SPKI_SECRET=$(openssl pkey -in "$K" -pubout -outform DER | base64 -w0)
+          SPKI_APP=$(grep -oP "UPDATE_KEY:\s*'\K[A-Za-z0-9+/=]+" www/js/config.js)
+          PKCS1_SECRET=$(openssl rsa -in "$K" -RSAPublicKey_out 2>/dev/null | tr -d '\n')
+          PKCS1_APP=$(jq -r '.plugins.CapacitorUpdater.publicKey' capacitor.config.json | tr -d '\n')
+          if [ "$SPKI_SECRET" != "$SPKI_APP" ] || [ "$PKCS1_SECRET" != "$PKCS1_APP" ]; then
+            echo "::error title=La clave no coincide::La clave del Secret no es la misma que la que verifica la app. No se publica nada."
+            exit 1
+          fi
+          printf '%s' "$SPKI_APP" > "$RUNNER_TEMP/firma/pub.b64"
+          echo "Clave verificada."
 
       - name: Poner número de versión en la app
         run: |
           sed -i "s#__REPO__#${GITHUB_REPOSITORY}#; s#BUILD: 0#BUILD: ${BUILD}#; s#VERSION: '2.0.0'#VERSION: '2.0.${BUILD}'#" www/js/config.js
-          cat www/js/config.js | grep -E "REPO|BUILD|VERSION|NATIVE_API"
+          grep -E "^\s+(REPO|BUILD|VERSION|NATIVE_API):" www/js/config.js
 
-      - name: Instalar dependencias
-        run: npm install --no-audit --no-fund
+      - name: Instalar dependencias (versiones exactas del package-lock.json)
+        run: npm ci --no-audit --no-fund
 
       - name: Crear proyecto Android
         run: npx cap add android
 
-      - name: Ajustar herramientas de Android (el plugin de actualizaciones las necesita)
+      - name: Ajustar herramientas de Android
         run: |
           sed -i "s/compileSdkVersion = 34/compileSdkVersion = 35/" android/variables.gradle
           sed -i "s#com.android.tools.build:gradle:8.2.1#com.android.tools.build:gradle:8.7.2#" android/build.gradle
           sed -i "s#gradle-8.2.1-all.zip#gradle-8.9-all.zip#" android/gradle/wrapper/gradle-wrapper.properties
+          printf '\nandroid { lint { checkReleaseBuilds false; abortOnError false } }\n' >> android/app/build.gradle
           grep -nE "compileSdkVersion|targetSdkVersion" android/variables.gradle
-          grep -n "com.android.tools.build:gradle" android/build.gradle
-          grep -n distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Generar íconos y pantalla de inicio
         run: npx capacitor-assets generate --android
@@ -70,57 +93,64 @@ jobs:
           sed -i "s/versionCode 1/versionCode ${BUILD}/; s/versionName \"1.0\"/versionName \"2.0.${BUILD}\"/" android/app/build.gradle
           grep -nE "versionCode|versionName" android/app/build.gradle
 
-      - name: Compilar APK
+      - name: Compilar APK de producción (no depurable)
         working-directory: android
         run: |
           set +e
-          ./gradlew assembleDebug --no-daemon --stacktrace > ../gradle.log 2>&1
+          ./gradlew assembleRelease --no-daemon --stacktrace > ../gradle.log 2>&1
           CODE=$?
           if [ $CODE -ne 0 ]; then
-            # Muestra el motivo del error como anotación (se ve en la página de la ejecución)
             MSG=$( (grep -E -A14 "What went wrong|error:|Execution failed" ../gradle.log | head -n 45) | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Falló Gradle::${MSG}"
             tail -n 60 ../gradle.log
           fi
           exit $CODE
 
-      - name: Firmar el APK con tu clave guardada
+      - name: Firmar el APK con tu clave y comprobarlo
         run: |
-          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
-          OUT=android/app/build/outputs/apk/debug
-          "$APKSIGNER" sign --ks ~/.android/debug.keystore --ks-pass pass:android \
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          OUT=android/app/build/outputs/apk/release
+          "$BT/zipalign" -f -p 4 "$OUT/app-release-unsigned.apk" "$OUT/alineado.apk"
+          "$BT/apksigner" sign --ks ~/.android/debug.keystore --ks-pass pass:android \
             --ks-key-alias androiddebugkey --key-pass pass:android \
-            --out "$OUT/MotorLog-firmado.apk" "$OUT/app-debug.apk"
-          "$APKSIGNER" verify --print-certs "$OUT/MotorLog-firmado.apk" | tee firma.txt
+            --out "$OUT/MotorLog-firmado.apk" "$OUT/alineado.apk"
+          "$BT/apksigner" verify --print-certs "$OUT/MotorLog-firmado.apk" | tee firma.txt
           FP=$(grep -m1 "certificate SHA-256 digest" firma.txt | sed 's/.*digest: //')
           echo "::notice title=Huella de la clave de firma del APK::${FP}"
+          "$BT/aapt2" dump badging "$OUT/MotorLog-firmado.apk" > badging.txt
+          head -n 1 badging.txt
+          if grep -q "application-debuggable" badging.txt; then
+            echo "::error title=APK depurable::El APK quedó en modo depuración. No se publica."
+            exit 1
+          fi
+          echo "::notice title=APK de producción::No es depurable (nadie puede inspeccionar la app por cable)."
 
-      - name: Preparar archivos de la actualización
+      - name: Cifrar, firmar y verificar la actualización
         run: |
           mkdir -p salida
-          cp android/app/build/outputs/apk/debug/MotorLog-firmado.apk salida/MotorLog.apk
-          (cd www && zip -qr ../salida/bundle.zip .)
+          cp android/app/build/outputs/apk/release/MotorLog-firmado.apk salida/MotorLog.apk
+          (cd www && zip -qrX ../bundle.zip .)
           NATIVE=$(grep -oP "NATIVE_API:\s*\K[0-9]+" www/js/config.js)
-          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${BUILD}"
           NOTES="${COMMIT_MSG:-Mejoras y correcciones}"
           NOTES=$(printf '%s\n' "$NOTES" | grep -viE '^(co-authored-by|claude-session)' | grep -v '^[[:space:]]*$' | head -n 3)
           [ -z "$NOTES" ] && NOTES="Mejoras y correcciones"
           printf '%s\n' "$NOTES" > salida/notas.txt
-          jq -n \
-            --argjson build "$BUILD" \
-            --arg version "2.0.${BUILD}" \
-            --arg apk "${BASE}/MotorLog.apk" \
-            --arg bundle "${BASE}/bundle.zip" \
-            --argjson minNative "$NATIVE" \
-            --arg notes "$NOTES" \
-            '{build:$build, version:$version, apk:$apk, bundle:$bundle, minNative:$minNative, notes:$notes}' > salida/version.json
-          cat salida/version.json
+          REPO="$GITHUB_REPOSITORY" VERSION="2.0.${BUILD}" MIN_NATIVE="$NATIVE" NOTES="$NOTES" \
+            bash scripts/firmar-actualizacion.sh "$RUNNER_TEMP/firma/key.pem" bundle.zip salida
+          # Se verifica como lo hará el teléfono, solo con la clave pública
+          bash scripts/verificar-actualizacion.sh salida/version.json salida/bundle.enc "$RUNNER_TEMP/firma/pub.b64" bundle.zip
+          jq '{build, version, minNative, notes}' salida/version.json
 
       - name: Publicar Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${BUILD}" salida/MotorLog.apk salida/bundle.zip salida/version.json \
+          gh release create "v${BUILD}" salida/MotorLog.apk salida/bundle.enc salida/version.json \
+            --repo "$GITHUB_REPOSITORY" \
             --title "MotorLog 2.0.${BUILD}" \
             --notes-file salida/notas.txt \
             --latest
+
+      - name: Borrar la clave del equipo de compilación
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/firma" ~/.android/debug.keystore

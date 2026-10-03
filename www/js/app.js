@@ -61,18 +61,51 @@ async function persist(v) {
   catch (e) { showDialog('Error', 'No se pudo guardar en el teléfono. ¿Poco espacio libre?'); throw e; }
 }
 
+// ---- Validación estricta de datos ----
+// Todo lo que entra (base de datos, respaldo importado, versión vieja) se reconstruye campo por campo.
+// Así un respaldo armado a propósito no puede meter código en la app.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const DATA_IMG = /^data:image\/[a-z0-9.+-]{1,40};base64,[A-Za-z0-9+/=]+$/i;
+const DATA_FILE = /^data:(image\/[a-z0-9.+-]{1,40}|application\/pdf);base64,[A-Za-z0-9+/=]+$/i;
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const str = (x, max) => (x == null ? '' : String(x)).slice(0, max);
+const int0 = x => { const n = Math.round(Number(x)); return Number.isFinite(n) && n > 0 ? n : 0; };
+const money0 = x => { const n = Number(x); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
+const isoOr = (x, d) => (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)) ? x : d;
+const safeId = (x, p) => (x != null && SAFE_ID.test(String(x))) ? String(x) : uid(p);
+
+function cleanRecord(h) {
+  h = (h && typeof h === 'object') ? h : {};
+  const tipo = str(h.tipo, 200).trim() || 'Service';
+  let adj = null;
+  if (h.adjunto && typeof h.adjunto === 'object' && typeof h.adjunto.data === 'string' && DATA_FILE.test(h.adjunto.data)) {
+    adj = { nombre: str(h.adjunto.nombre, 120) || 'comprobante', tipo: h.adjunto.data.slice(5, h.adjunto.data.indexOf(';')), data: h.adjunto.data };
+  }
+  const kmP = int0(h.kmProximo);
+  return {
+    id: safeId(h.id, 'm_'),
+    cat: CATEGORIES.some(c => c.id === h.cat) ? h.cat : detectCat(tipo),
+    tipo, kmRealizado: int0(h.kmRealizado), fecha: isoOr(h.fecha, ''),
+    kmProximo: kmP || null, fechaProxima: isoOr(h.fechaProxima, null), costo: money0(h.costo),
+    taller: str(h.taller, 120), direccion: str(h.direccion, 200), telefono: str(h.telefono, 40).replace(/[^\d+()\-\s.#*]/g, ''),
+    enlaceMaps: str(h.enlaceMaps, 600), notas: str(h.notas, 2000), adjunto: adj,
+  };
+}
 function normalize(v) {
-  v.clase = v.clase || 'auto';
-  v.kmActual = v.kmActual || 0;
-  v.observaciones = v.observaciones || '';
-  v.historial = Array.isArray(v.historial) ? v.historial : [];
-  v.historial.forEach(h => {
-    h.cat = h.cat || detectCat(h.tipo);
-    h.kmProximo = h.kmProximo ? Number(h.kmProximo) : null;
-    h.fechaProxima = h.fechaProxima || null;
-    h.costo = h.costo ? Number(h.costo) : 0;
+  v = (v && typeof v === 'object') ? v : {};
+  const ids = new Set();
+  const historial = (Array.isArray(v.historial) ? v.historial : []).slice(0, 5000).map(cleanRecord).map(h => {
+    while (ids.has(h.id)) h.id = uid('m_');
+    ids.add(h.id); return h;
   });
-  return v;
+  return {
+    id: safeId(v.id, 'v_'),
+    clase: VEHICLE_TYPES.some(t => t.id === v.clase) ? v.clase : 'auto',
+    marca: str(v.marca, 60).trim() || 'Vehículo', modelo: str(v.modelo, 60).trim(),
+    anio: str(v.anio, 10).replace(/[^\d]/g, ''), dominio: str(v.dominio, 12).toUpperCase().replace(/[^A-Z0-9 -]/g, ''),
+    detalle: str(v.detalle, 80), foto: (typeof v.foto === 'string' && DATA_IMG.test(v.foto)) ? v.foto : null,
+    kmActual: int0(v.kmActual), observaciones: str(v.observaciones, 5000), historial,
+  };
 }
 
 async function migrateOld() {
@@ -80,7 +113,7 @@ async function migrateOld() {
   if (!raw) return;
   try {
     const old = JSON.parse(raw);
-    for (const v of old) { if (!vehicles.find(x => x.id === v.id)) { normalize(v); await DB.put(v); vehicles.push(v); } }
+    for (const raw of old) { const v = normalize(raw); if (!vehicles.find(x => x.id === v.id)) { await DB.put(v); vehicles.push(v); } }
     localStorage.removeItem(OLD_KEY);
   } catch (e) {}
 }
@@ -191,7 +224,7 @@ function resetForm(id) {
 }
 
 // ---------------- Render: Garage ----------------
-function thumbHtml(v) { return v.foto ? `<img src="${v.foto}" alt="">` : typeSvg(v.clase); }
+function thumbHtml(v) { return v.foto && DATA_IMG.test(v.foto) ? `<img src="${esc(v.foto)}" alt="">` : typeSvg(v.clase); }
 
 function renderGarage() {
   const list = $('vehicle-list');
@@ -409,8 +442,10 @@ async function saveService() {
     const f = $('s-adjunto').files[0];
     if (f) {
       if (f.size > 3 * 1024 * 1024) throw new Error('El archivo supera 3 MB.');
-      const data = f.type.startsWith('image/') ? await compressImage(f, 1400, 0.72) : await readAsDataURL(f);
-      adj = { nombre: f.name, tipo: f.type.startsWith('image/') ? 'image/jpeg' : f.type, data };
+      const isImg = f.type.startsWith('image/'), isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+      if (!isImg && !isPdf) throw new Error('El comprobante tiene que ser una foto o un PDF.');
+      const data = isImg ? await compressImage(f, 1400, 0.72) : 'data:application/pdf;base64,' + (await readAsDataURL(f)).split(',')[1];
+      adj = { nombre: str(f.name, 120), tipo: isImg ? 'image/jpeg' : 'application/pdf', data };
     }
     const base = {
       cat: selCat, tipo, kmRealizado: km, fecha,
@@ -489,7 +524,7 @@ function viewAttachment(id) {
   currentAtt = h.adjunto;
   $('att-title').textContent = h.tipo;
   $('att-body').innerHTML = h.adjunto.tipo.startsWith('image/')
-    ? `<img src="${h.adjunto.data}" alt="Comprobante">`
+    ? `<img src="${esc(h.adjunto.data)}" alt="Comprobante">`
     : `<div><p style="font-size:22px;font-weight:800;margin:0 0 6px">📄 Documento PDF</p><p style="opacity:.7;font-size:13px;margin:0">${esc(h.adjunto.nombre)}</p></div>`;
   const m = $('modal-att'); m.classList.remove('hidden'); requestAnimationFrame(() => requestAnimationFrame(() => m.classList.add('on')));
 }
@@ -503,15 +538,16 @@ async function exportData() {
 }
 function importData(e) {
   const file = e.target.files[0]; if (!file) return;
+  if (file.size > 80 * 1024 * 1024) { e.target.value = ''; return showDialog('Error', 'El archivo es demasiado grande para ser un respaldo de MotorLog.'); }
   const fr = new FileReader();
   fr.onload = async ev => {
     try {
       let data = JSON.parse(ev.target.result);
       if (data && Array.isArray(data.vehicles)) data = data.vehicles;
       if (!Array.isArray(data)) throw new Error('formato');
-      for (const v of data) {
-        if (!v || !v.id) continue;
-        normalize(v); await DB.put(v);
+      for (const raw of data.slice(0, 500)) {
+        if (!raw || typeof raw !== 'object') continue;
+        const v = normalize(raw); await DB.put(v);
         const i = vehicles.findIndex(x => x.id === v.id); if (i >= 0) vehicles[i] = v; else vehicles.push(v);
       }
       closeSheet(); navigate('home'); showToast('Datos restaurados', 'success'); scheduleNotifications();
@@ -836,6 +872,27 @@ function openMaps(id) {
   if (url) openExternal(url);
 }
 
+// ---- Seguridad de actualizaciones ----
+// Solo se acepta un version.json firmado con TU clave (la misma que firma el APK).
+// Además el plugin comprueba el paquete con esa clave pública (SHA-256 + RSA) antes de instalarlo.
+const b64bytes = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+async function verifyUpdate(info) {
+  try {
+    if (!info || !info.signed || info.signed.alg !== 'RS256' || !info.signed.payload || !info.signed.sig || !CFG.UPDATE_KEY) return null;
+    const S = window.crypto && window.crypto.subtle; if (!S) return null;
+    const key = await S.importKey('spki', b64bytes(CFG.UPDATE_KEY), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+    const data = b64bytes(info.signed.payload);
+    if (!(await S.verify('RSASSA-PKCS1-v1_5', key, b64bytes(info.signed.sig), data))) return null;
+    const p = JSON.parse(new TextDecoder().decode(data));
+    const base = `https://github.com/${CFG.REPO}/releases/download/v${p.build}/`;
+    if (p.app !== 'com.motorlog.app' || p.repo !== CFG.REPO) return null;              // de esta app y de tu repositorio
+    if (!Number.isInteger(p.build) || p.build < 1) return null;
+    if (String(p.apk) !== base + 'MotorLog.apk' || String(p.bundle) !== base + 'bundle.enc') return null;  // solo descargas desde tu repositorio
+    if (!/^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(p.sessionKey || '') || !/^[A-Za-z0-9+/=]+$/.test(p.checksum || '')) return null;
+    return p;
+  } catch (e) { return null; }
+}
+
 async function checkUpdate(manual) {
   if (!updEnabled()) {
     if (manual) showToast('Las actualizaciones funcionan en la app instalada', 'info');
@@ -843,8 +900,15 @@ async function checkUpdate(manual) {
   }
   if (manual) setUpdStatus('Buscando…');
   try {
-    const info = await httpGetJson(`https://github.com/${CFG.REPO}/releases/latest/download/version.json?t=${Date.now()}`);
-    if (!info || !(Number(info.build) > Number(CFG.BUILD))) {
+    const raw = await httpGetJson(`https://github.com/${CFG.REPO}/releases/latest/download/version.json?t=${Date.now()}`);
+    const info = await verifyUpdate(raw);
+    if (!info) {
+      // Sin firma válida no se ofrece nada (ni actualización en vivo ni APK).
+      setUpdStatus(`Versión ${CFG.VERSION} · no hay actualizaciones verificadas`);
+      if (manual) showToast(raw && Number(raw.build) > Number(CFG.BUILD) ? 'Se ignoró una actualización sin firma válida' : 'Ya tenés la última versión', raw && Number(raw.build) > Number(CFG.BUILD) ? 'error' : 'success');
+      return;
+    }
+    if (!(info.build > Number(CFG.BUILD))) {
       setUpdStatus(`Versión ${CFG.VERSION} · estás al día ✓`);
       if (manual) showToast('Ya tenés la última versión', 'success');
       return;
@@ -853,8 +917,8 @@ async function checkUpdate(manual) {
     // En el chequeo automático no se vuelve a insistir con una versión que ya se rechazó.
     if (!manual && localStorage.getItem('ml_upd_skip') === String(info.build)) return;
     if (!manual && activeSheet) return;
-    const live = !!(info.bundle && Number(info.minNative || 1) <= Number(CFG.NATIVE_API) && plug('CapacitorUpdater'));
-    const body = (info.notes ? info.notes + '\n\n' : '') +
+    const live = !!(Number(info.minNative || 1) <= Number(CFG.NATIVE_API) && plug('CapacitorUpdater'));
+    const body = (info.notes ? info.notes + '\n\n' : '') + '🔒 Actualización verificada con tu firma.\n' +
       (live ? 'Se descarga en unos segundos y la app se reinicia sola. Tus datos no se tocan.'
             : 'Esta actualización necesita instalar un APK nuevo. Se abre la descarga; después abrí el archivo para instalarlo encima.');
     showDialog(`Versión ${info.version} disponible`, body, () => applyUpdate(info, live), live ? 'Actualizar ahora' : 'Descargar APK');
@@ -870,11 +934,12 @@ async function applyUpdate(info, live) {
   const U = plug('CapacitorUpdater');
   try {
     showToast('Descargando actualización…', 'info');
-    const b = await U.download({ url: info.bundle, version: String(info.version) });
+    // sessionKey + checksum: el plugin descifra el paquete y comprueba su SHA-256 con tu clave pública.
+    const b = await U.download({ url: info.bundle, version: String(info.version), sessionKey: info.sessionKey, checksum: info.checksum });
     showToast('Listo, reiniciando…', 'success');
     setTimeout(() => U.set({ id: b.id }), 600);
   } catch (e) {
-    showDialog('No se pudo actualizar', 'Podés descargar el APK nuevo e instalarlo encima: no se pierden tus datos.', () => openExternal(info.apk), 'Descargar APK');
+    showDialog('No se pudo actualizar', 'El paquete no pasó la verificación o no se pudo descargar. Podés instalar el APK nuevo encima: no se pierden tus datos.', () => openExternal(info.apk), 'Descargar APK');
   }
 }
 
@@ -897,7 +962,12 @@ async function init() {
 
   try {
     await DB.open();
-    vehicles = (await DB.all()).map(normalize);
+    vehicles = [];
+    for (const raw of await DB.all()) {
+      const v = normalize(raw);
+      if (!raw || raw.id !== v.id) { try { if (raw && raw.id != null) await DB.del(raw.id); await DB.put(v); } catch (e) {} }
+      vehicles.push(v);
+    }
     await migrateOld();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
   } catch (e) {
