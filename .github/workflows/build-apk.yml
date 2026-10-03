@@ -84,15 +84,27 @@ jobs:
           fi
           exit $CODE
 
+      - name: Firmar el APK con tu clave guardada
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
+          OUT=android/app/build/outputs/apk/debug
+          "$APKSIGNER" sign --ks ~/.android/debug.keystore --ks-pass pass:android \
+            --ks-key-alias androiddebugkey --key-pass pass:android \
+            --out "$OUT/MotorLog-firmado.apk" "$OUT/app-debug.apk"
+          "$APKSIGNER" verify --print-certs "$OUT/MotorLog-firmado.apk" | tee firma.txt
+          FP=$(grep -m1 "certificate SHA-256 digest" firma.txt | sed 's/.*digest: //')
+          echo "::notice title=Huella de la clave de firma del APK::${FP}"
+
       - name: Preparar archivos de la actualización
         run: |
           mkdir -p salida
-          cp android/app/build/outputs/apk/debug/app-debug.apk salida/MotorLog.apk
+          cp android/app/build/outputs/apk/debug/MotorLog-firmado.apk salida/MotorLog.apk
           (cd www && zip -qr ../salida/bundle.zip .)
           NATIVE=$(grep -oP "NATIVE_API:\s*\K[0-9]+" www/js/config.js)
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${BUILD}"
           NOTES="${COMMIT_MSG:-Mejoras y correcciones}"
-          NOTES=$(printf '%s' "$NOTES" | head -n 3)
+          NOTES=$(printf '%s\n' "$NOTES" | grep -viE '^(co-authored-by|claude-session)' | grep -v '^[[:space:]]*$' | head -n 3)
+          [ -z "$NOTES" ] && NOTES="Mejoras y correcciones"
           printf '%s\n' "$NOTES" > salida/notas.txt
           jq -n \
             --argjson build "$BUILD" \
