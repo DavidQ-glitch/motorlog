@@ -119,7 +119,7 @@ En Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Ojo:
 - **Dentro de un vehículo**: *Actualizar KM*, *Service* (elegí el ícono de lo que se hizo), *Notas*, ✏️ editar, ⬆️ compartir reporte.
 - **Service**: el botón **✨ Sugerir** completa el próximo KM y la próxima fecha. La alerta sale en rojo si venció y en amarillo si falta poco (1.500 km o 30 días).
 - **Avisos**: se ofrecen al guardar tu primer service con fecha, o en *Ajustes → Avisos de vencimientos*.
-- **Reporte**: abrí el archivo compartido en el navegador del celular y usá *Imprimir → Guardar como PDF*.
+- **Reporte en PDF**: tocá el ícono de documento (arriba a la derecha, dentro de un vehículo). Se arma un PDF con foto, resumen, vencimientos, observaciones e historial completo, y se abre el menú de Android para enviarlo por WhatsApp, guardarlo en Drive, etc.
 
 ## Importante
 - Tus datos viven **solo en el teléfono**. Hacé un respaldo de vez en cuando y guardalo en Drive.

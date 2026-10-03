@@ -158,7 +158,11 @@ function openSheet(id) {
   vibrate();
   if (activeSheet && activeSheet !== id) $(activeSheet).classList.remove('open');
   $('backdrop').classList.add('on');
+  // Cada formulario se abre siempre desde arriba (si no, recuerda dónde quedó la última vez).
+  const inner = $(id).querySelector('.sheet-in');
+  if (inner) inner.scrollTop = 0;
   $(id).classList.add('open');
+  requestAnimationFrame(() => { if (inner) inner.scrollTop = 0; });
   activeSheet = id;
   if (id === 'sheet-settings') $('sw-notif').classList.toggle('on', localStorage.getItem('ml_notif') === '1');
 }
@@ -521,37 +525,223 @@ function confirmClear() {
   }, 'Borrar todo');
 }
 
-// ---------------- Reporte ----------------
-function buildReport(v) {
-  const total = v.historial.reduce((s, h) => s + (h.costo || 0), 0);
-  const rows = [...v.historial].sort((a, b) => cmpRec(b, a)).map(h => {
-    const nx = [h.kmProximo ? nf(h.kmProximo) + ' KM' : null, h.fechaProxima ? fmtDate(h.fechaProxima) : null].filter(Boolean).join(' o el ');
-    return `<tr><td>${fmtDate(h.fecha)}</td><td><b>${catById(h.cat).icon} ${esc(h.tipo)}</b><br><span class="b">${nf(h.kmRealizado)} KM</span>${h.taller ? `<br><small>Taller: ${esc(h.taller)}${h.telefono ? ' · ' + esc(h.telefono) : ''}</small>` : ''}${h.notas ? `<br><small>${esc(h.notas)}</small>` : ''}</td><td>${h.costo ? money(h.costo) : '-'}</td><td>${nx ? 'A los ' + nx : '-'}</td></tr>`;
-  }).join('');
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reporte ${esc(v.marca)} ${esc(v.modelo)}</title>
-<style>body{font-family:Arial,sans-serif;color:#0f172a;max-width:900px;margin:0 auto;padding:24px}h1{margin:0;color:#1d4ed8}.sub{color:#64748b;margin:2px 0 18px}
-.info{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:16px}.info span{display:block;font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700}.info b{font-size:16px}
-.obs{background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;margin-bottom:16px;border-radius:6px;white-space:pre-line}
-table{width:100%;border-collapse:collapse}th{background:#f8fafc;text-align:left;padding:8px;font-size:11px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:10px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:top}
-.b{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700}small{color:#64748b}.foot{text-align:center;color:#94a3b8;font-size:11px;margin-top:30px}</style></head><body>
-<h1>MotorLog</h1><p class="sub">Historial de mantenimiento</p>
-<div class="info"><div><span>Vehículo</span><b>${esc(v.marca)} ${esc(v.modelo)}</b></div><div><span>Año / Versión</span><b>${esc([v.anio, v.detalle].filter(Boolean).join(' • ') || '-')}</b></div><div><span>Patente</span><b>${esc(v.dominio || '-')}</b></div><div><span>Kilometraje</span><b>${nf(v.kmActual)} KM</b></div><div><span>Gasto total</span><b>${money(total)}</b></div></div>
-${v.observaciones ? `<div class="obs"><b>Observaciones técnicas</b><br>${esc(v.observaciones)}</div>` : ''}
-<table><thead><tr><th>Fecha</th><th>Tarea</th><th>Costo</th><th>Próximo</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">Sin registros</td></tr>'}</tbody></table>
-<div class="foot">Generado por MotorLog el ${new Date().toLocaleDateString('es-AR')}</div></body></html>`;
+// ---------------- Reporte en PDF ----------------
+const PC = { dark: [15, 23, 42], brand: [37, 99, 235], mute: [100, 116, 139], soft: [148, 163, 184], line: [226, 232, 240], bg: [248, 250, 252],
+             blueBg: [239, 246, 255], red: [220, 38, 38], amb: [217, 119, 6] };
+const fmtDateLong = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
+// El PDF usa fuentes estándar: se quitan los caracteres que no tienen (emojis, símbolos raros).
+const pdfSafe = s => String(s == null ? '' : s)
+  .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...').replace(/•/g, '·')
+  .replace(/[^\x20-\x7E -ÿ\n]/g, '').replace(/[ \t]+/g, ' ').trim();
+
+// Dibuja un emoji en un cuadradito PNG (para ponerlo como ícono en el PDF). Si el teléfono no puede, devuelve null.
+function emojiPng(ch) {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 96;
+    const x = c.getContext('2d'); if (!x) return null;
+    x.font = '70px "Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(ch, 48, 52);
+    return c.toDataURL('image/png');
+  } catch (e) { return null; }
 }
+function loadImg(src) {
+  return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+}
+// Miniatura del vehículo: su foto (recortada) o el dibujo de su tipo.
+async function vehicleThumb(v) {
+  try {
+    const W = 440, H = 320;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'); if (!x) return null;
+    x.fillStyle = '#dbeafe'; x.fillRect(0, 0, W, H);
+    if (v.foto) {
+      const im = await loadImg(v.foto); if (!im) return null;
+      const k = Math.max(W / im.width, H / im.height), w = im.width * k, h = im.height * k;
+      x.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+    } else {
+      const svg = typeSvg(v.clase).replace(/currentColor/g, '#2563eb').replace('<svg ', '<svg width="480" height="240" ');
+      const im = await loadImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)); if (!im) return null;
+      x.drawImage(im, (W - 400) / 2, (H - 200) / 2, 400, 200);
+    }
+    return c.toDataURL('image/jpeg', 0.85);
+  } catch (e) { return null; }
+}
+
+async function buildReportPdf(v) {
+  const JS = window.jspdf && window.jspdf.jsPDF;
+  if (!JS) throw new Error('No se encontró la librería de PDF.');
+  const doc = new JS({ unit: 'mm', format: 'a4', compress: true });
+  const W = 210, H = 297, M = 14, CW = W - 2 * M, BOTTOM = H - 18;
+  const fill = c => doc.setFillColor(c[0], c[1], c[2]);
+  const stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
+  const color = c => doc.setTextColor(c[0], c[1], c[2]);
+  const font = (st, size) => { doc.setFont('helvetica', st); doc.setFontSize(size); };
+  const lh = size => size * 0.3528 * 1.3;
+  const wrap = (t, w) => doc.splitTextToSize(pdfSafe(t), w);
+
+  const total = v.historial.reduce((a, h) => a + (h.costo || 0), 0);
+  const last = [...v.historial].sort(cmpRec).pop();
+  const dueMap = new Map(getDue(v).map(d => [d.h.id, d.lvl]));
+  const thumb = await vehicleThumb(v);
+  const icons = {}; let hasIcons = false;
+  CATEGORIES.forEach(c => { const p = emojiPng(c.icon); if (p) { icons[c.id] = p; hasIcons = true; } });
+
+  // ---- Encabezado
+  fill(PC.dark); doc.rect(0, 0, W, 30, 'F');
+  fill(PC.brand); doc.rect(0, 30, W, 1.6, 'F');
+  color([255, 255, 255]); font('bold', 21); doc.text('MotorLog', M, 15);
+  color([147, 197, 253]); font('normal', 10); doc.text('Historial de mantenimiento', M, 22);
+  color([203, 213, 225]); font('normal', 8.5); doc.text('Generado el ' + new Date().toLocaleDateString('es-AR'), W - M, 15, { align: 'right' });
+
+  // ---- Vehículo
+  let y = 40;
+  fill(PC.blueBg); stroke(PC.line); doc.setLineWidth(0.3); doc.roundedRect(M, y, 46, 33.5, 3, 3, 'FD');
+  if (thumb) { try { doc.addImage(thumb, 'JPEG', M + 0.6, y + 0.6, 44.8, 32.3); } catch (e) {} }
+  const tx = M + 53;
+  color(PC.dark); font('bold', 18);
+  const nameLines = wrap(`${v.marca} ${v.modelo}`, CW - 53).slice(0, 2);
+  doc.text(nameLines, tx, y + 8);
+  let ty = y + 8 + nameLines.length * lh(18) - 1;
+  const sub = [v.anio, v.detalle].filter(Boolean).join('  ·  ');
+  if (sub) { color(PC.mute); font('normal', 10.5); doc.text(pdfSafe(sub), tx, ty + 2); ty += 8; }
+  if (v.dominio) {
+    font('bold', 13); doc.setFont('courier', 'bold');
+    const pw = doc.getTextWidth(pdfSafe(v.dominio)) + 10;
+    fill([255, 255, 255]); stroke(PC.dark); doc.setLineWidth(0.5); doc.roundedRect(tx, ty + 1, pw, 9, 1.5, 1.5, 'FD');
+    fill(PC.brand); doc.rect(tx + 0.25, ty + 1.25, pw - 0.5, 2, 'F');
+    color(PC.dark); doc.text(pdfSafe(v.dominio), tx + pw / 2, ty + 8.2, { align: 'center' });
+  }
+  y += 33.5 + 7;
+
+  // ---- Resumen
+  const stats = [['Kilometraje', nf(v.kmActual) + ' km'], ['Services', String(v.historial.length)], ['Gasto total', total ? money(total) : '-'], ['Ultimo service', last ? fmtDateLong(last.fecha) : '-']];
+  stats[3][0] = 'Último service';
+  const bw = (CW - 3 * 4) / 4;
+  stats.forEach((st, i) => {
+    const bx = M + i * (bw + 4);
+    fill(PC.bg); stroke(PC.line); doc.setLineWidth(0.3); doc.roundedRect(bx, y, bw, 15.5, 2.5, 2.5, 'FD');
+    color(PC.soft); font('bold', 7); doc.text(pdfSafe(st[0]).toUpperCase(), bx + 3.5, y + 5.5);
+    color(PC.dark); font('bold', 11); doc.text(pdfSafe(st[1]), bx + 3.5, y + 12);
+  });
+  y += 15.5 + 8;
+
+  const need = h => { if (y + h > BOTTOM) { doc.addPage(); y = M + 2; return true; } return false; };
+
+  // ---- Vencimientos
+  const due = getDue(v);
+  if (due.length) {
+    need(14 + due.length * 6);
+    color(PC.dark); font('bold', 12); doc.text('Vencimientos', M, y + 3); y += 8;
+    due.forEach(({ h, lvl, causes }) => {
+      need(7);
+      fill(lvl === 2 ? PC.red : PC.amb); doc.circle(M + 2, y - 1, 1.4, 'F');
+      color(PC.dark); font('bold', 9.5);
+      const t1 = pdfSafe(h.tipo) + ': ', w1 = doc.getTextWidth(t1);   // se mide en negrita, antes de cambiar de letra
+      doc.text(t1, M + 6, y);
+      font('normal', 9.5); color(lvl === 2 ? PC.red : PC.amb);
+      const t2 = (lvl === 2 ? 'vencido ' : 'próximo ') + pdfSafe(causes.join(' y '));
+      if (M + 6 + w1 + doc.getTextWidth(t2) > W - M) { y += 4.6; need(5); doc.text(t2, M + 6, y); }  // no entra: sigue abajo
+      else doc.text(t2, M + 6 + w1, y);
+      y += 6;
+    });
+    y += 3;
+  }
+
+  // ---- Observaciones técnicas
+  if ((v.observaciones || '').trim()) {
+    const lines = v.observaciones.split('\n').flatMap(l => wrap(l || ' ', CW - 10));
+    const lineH = lh(9.5);
+    need(22);
+    color(PC.dark); font('bold', 12); doc.text('Observaciones técnicas', M, y + 3); y += 7;
+    let i = 0;
+    while (i < lines.length) {
+      let maxLines = Math.floor((BOTTOM - y - 8) / lineH);
+      if (maxLines < 3) { doc.addPage(); y = M + 2; maxLines = Math.floor((BOTTOM - y - 8) / lineH); }
+      const chunk = lines.slice(i, i + maxLines), hh = chunk.length * lineH + 7;
+      fill([255, 251, 235]); stroke([253, 230, 138]); doc.setLineWidth(0.3); doc.roundedRect(M, y, CW, hh, 2.5, 2.5, 'FD');
+      fill([245, 158, 11]); doc.rect(M, y + 2, 1.2, hh - 4, 'F');
+      color([146, 64, 14]); font('normal', 9.5); doc.text(chunk, M + 5, y + 5.4, { lineHeightFactor: 1.3 });
+      y += hh + 3; i += chunk.length;
+    }
+    y += 3;
+  }
+
+  // ---- Historial (tabla)
+  const cols = [{ x: M, w: 22 }, { x: M + 22, w: 86 }, { x: M + 108, w: 24 }, { x: M + 132, w: 24 }, { x: M + 156, w: 26 }];
+  const head = ['FECHA', 'SERVICE', 'KM', 'COSTO', 'PRÓXIMO'];
+  const drawHead = () => {
+    fill(PC.dark); doc.roundedRect(M, y, CW, 8, 1.5, 1.5, 'F');
+    color([255, 255, 255]); font('bold', 7.5);
+    head.forEach((t, i) => doc.text(t, cols[i].x + 2.5, y + 5.3));
+    y += 8;
+  };
+  need(30);
+  color(PC.dark); font('bold', 12); doc.text('Historial de services', M, y + 3); y += 7;
+  if (!v.historial.length) {
+    color(PC.soft); font('normal', 10); doc.text('Todavía no hay services registrados.', M, y + 6); y += 10;
+  } else {
+    drawHead();
+    const items = [...v.historial].sort((a, b) => cmpRec(b, a));
+    const iconW = hasIcons ? 9 : 0, dW = cols[1].w - 5 - iconW;
+    items.forEach((h, idx) => {
+      const c = catById(h.cat);
+      font('bold', 9.5); const tl = wrap(h.tipo, dW);
+      font('normal', 8);
+      const extra = [];
+      if (pdfSafe(c.label).toLowerCase() !== pdfSafe(h.tipo).toLowerCase()) extra.push({ t: c.label, c: PC.soft });
+      if (h.taller || h.telefono) wrap('Taller: ' + [h.taller, h.telefono].filter(Boolean).join(' · '), dW).forEach(t => extra.push({ t, c: PC.mute }));
+      if (h.notas) wrap(h.notas, dW).forEach(t => extra.push({ t, c: PC.mute }));
+      const nxt = [];
+      if (h.kmProximo) nxt.push(nf(h.kmProximo) + ' km');
+      if (h.fechaProxima) nxt.push(fmtDateLong(h.fechaProxima));
+      const dh = tl.length * lh(9.5) + extra.length * lh(8);
+      const rh = Math.max(11, dh + 5.5, nxt.length * 4.4 + 5.5);
+      if (y + rh > BOTTOM) { doc.addPage(); y = M + 2; drawHead(); }
+      if (idx % 2 === 0) { fill(PC.bg); doc.rect(M, y, CW, rh, 'F'); }
+      stroke(PC.line); doc.setLineWidth(0.2); doc.line(M, y + rh, M + CW, y + rh);
+      const base = y + 5.4;
+      color(PC.dark); font('normal', 8.5); doc.text(fmtDateLong(h.fecha), cols[0].x + 2.5, base);
+      if (hasIcons && icons[h.cat]) { try { doc.addImage(icons[h.cat], 'PNG', cols[1].x + 2.5, y + 2.2, 6.4, 6.4); } catch (e) {} }
+      const dx = cols[1].x + 2.5 + iconW;
+      color(PC.dark); font('bold', 9.5); doc.text(tl, dx, base, { lineHeightFactor: 1.3 });
+      let ey = base + (tl.length - 1) * lh(9.5) + lh(8) + 0.3;
+      font('normal', 8);
+      extra.forEach(e => { color(e.c); doc.text(e.t, dx, ey); ey += lh(8); });
+      color(PC.dark); font('bold', 8.5); doc.text(nf(h.kmRealizado) + ' km', cols[2].x + 2.5, base);
+      font('normal', 8.5); color(h.costo ? PC.dark : PC.soft); doc.text(h.costo ? money(h.costo) : '-', cols[3].x + 2.5, base);
+      const lvl = dueMap.get(h.id);
+      color(lvl === 2 ? PC.red : lvl === 1 ? PC.amb : PC.mute); font(lvl ? 'bold' : 'normal', 8.5);
+      if (nxt.length) nxt.forEach((t, i) => doc.text(t, cols[4].x + 2.5, base + i * 4.4)); else { color(PC.soft); doc.text('-', cols[4].x + 2.5, base); }
+      y += rh;
+    });
+    if (total) {
+      need(12); y += 4;
+      color(PC.mute); font('normal', 9); doc.text('Total gastado', W - M - 40, y + 1, { align: 'right' });
+      color(PC.dark); font('bold', 12); doc.text(money(total), W - M, y + 1.2, { align: 'right' });
+    }
+  }
+
+  // ---- Pie de página en todas las hojas
+  const n = doc.getNumberOfPages();
+  const foot = pdfSafe(`MotorLog  ·  ${v.marca} ${v.modelo}${v.dominio ? '  ·  ' + v.dominio : ''}`);
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i); stroke(PC.line); doc.setLineWidth(0.3); doc.line(M, H - 12, W - M, H - 12);
+    color(PC.soft); font('normal', 8); doc.text(foot, M, H - 7.5); doc.text(`Página ${i} de ${n}`, W - M, H - 7.5, { align: 'right' });
+  }
+  return doc.output('datauristring');
+}
+
 async function shareReport() {
   const v = curV(); if (!v) return;
-  const html = buildReport(v);
-  const name = `Reporte_${(v.dominio || v.modelo || 'vehiculo').replace(/[^\w-]+/g, '_')}.html`;
-  if (isNative()) {
-    const ok = await shareFile(name, html, 'text/html');
-    if (ok) showToast('Abrilo en el navegador para imprimir o guardar PDF', 'info');
-  } else {
-    let f = $('print-frame');
-    if (!f) { f = document.createElement('iframe'); f.id = 'print-frame'; f.style.display = 'none'; document.body.appendChild(f); }
-    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); }, 250);
+  showToast('Generando PDF…', 'info');
+  try {
+    const uri = await buildReportPdf(v);
+    const base = (v.dominio || (v.marca + '_' + v.modelo)).replace(/[^\w-]+/g, '_');
+    const ok = await shareFile(`Reporte_${base}_${isoDate(new Date())}.pdf`, uri, 'application/pdf', true);
+    if (ok) showToast(isNative() ? 'PDF listo para compartir' : 'PDF descargado', 'success');
+  } catch (e) {
+    console.error(e);
+    showDialog('No se pudo crear el PDF', (e && e.message) || 'Probá de nuevo.');
   }
 }
 
