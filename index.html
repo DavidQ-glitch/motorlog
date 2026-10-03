@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>MotorLog</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- SPLASH: la foto de tus autos -->
+  <div id="splash">
+    <div class="splash-logo">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16a8 8 0 1116 0"/><path d="M12 16l4-6"/><circle cx="12" cy="16" r="1.4" fill="currentColor"/><path d="M6 8l1 1M18 8l-1 1M12 5v1.5"/></svg>
+    </div>
+    <h1>MotorLog</h1>
+    <p>Control inteligente</p>
+    <div class="splash-bar"><i></i></div>
+  </div>
+
+  <!-- HOME / GARAGE -->
+  <section id="view-home" class="view active">
+    <header class="hero">
+      <div class="hero-row">
+        <div>
+          <h1>Mi Garage</h1>
+          <p id="home-sub">Cargando…</p>
+        </div>
+        <button class="icon-btn" onclick="openSheet('sheet-settings')" aria-label="Ajustes">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+        </button>
+      </div>
+      <div class="chips-summary" id="home-pills"></div>
+    </header>
+    <main id="vehicle-list" class="scroll noscroll"></main>
+    <div id="empty" class="hidden">
+      <div class="big" id="empty-ico"></div>
+      <h3>Tu garage está vacío</h3>
+      <p>Agregá tu primer vehículo para empezar a llevar el registro de mantenimiento.</p>
+    </div>
+    <button class="fab" onclick="openAddVehicle()" aria-label="Agregar vehículo">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v16m8-8H4"/></svg>
+    </button>
+  </section>
+
+  <!-- VEHÍCULO -->
+  <section id="view-vehicle" class="view right">
+    <header class="vhead">
+      <button class="icon-btn light" onclick="navigate('home')" aria-label="Volver"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"/></svg></button>
+      <div class="t"><h2 id="det-name">Vehículo</h2><p id="det-sub"></p></div>
+      <button class="icon-btn light" onclick="openEditVehicle()" aria-label="Editar"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z"/></svg></button>
+      <button class="icon-btn light" onclick="shareReport()" aria-label="Reporte"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button>
+    </header>
+    <main class="scroll noscroll" style="padding-bottom:40px">
+      <div class="hero-card">
+        <div class="big-thumb" id="det-thumb"></div>
+        <div id="det-plate-wrap"><div class="plate" id="det-plate">AAA123</div></div>
+        <p class="lbl">Kilometraje total</p>
+        <div class="odo"><b id="det-km">000000</b><span>KM</span></div>
+        <button class="btn soft" onclick="openKm()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.6M20 11A8 8 0 004.6 9m0 0H9m11 11v-5h-.6m0 0A8 8 0 014.1 13m15.3 2H15"/></svg>
+          Actualizar KM
+        </button>
+      </div>
+
+      <div class="stats" id="det-stats"></div>
+
+      <div class="actions">
+        <button class="btn brand" onclick="openAddService()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v16m8-8H4"/></svg>Service</button>
+        <button class="btn white" onclick="openNotes()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z"/></svg>Notas</button>
+      </div>
+
+      <div class="sec" id="alerts"></div>
+      <div class="sec" id="notes-box"></div>
+
+      <div class="sec">
+        <div class="sec-title"><h3>Historial</h3></div>
+        <div class="filters noscroll" id="filters"></div>
+        <div id="timeline"></div>
+      </div>
+    </main>
+  </section>
+
+  <div id="backdrop" onclick="closeSheet()"></div>
+
+  <!-- SHEET: vehículo -->
+  <div id="sheet-vehicle" class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-in">
+      <h2 id="sv-title">Nuevo vehículo</h2>
+      <span class="tlabel">Tipo de vehículo</span>
+      <div class="typegrid" id="type-grid"></div>
+      <div class="row2">
+        <div class="f"><label>Marca *</label><input id="v-marca" list="dl-marcas" placeholder="Peugeot" autocomplete="off"></div>
+        <div class="f"><label>Modelo *</label><input id="v-modelo" list="dl-modelos" placeholder="307 CC" autocomplete="off"></div>
+      </div>
+      <datalist id="dl-marcas"></datalist><datalist id="dl-modelos"></datalist>
+      <div class="row2">
+        <div class="f"><label>Año</label><input id="v-anio" type="number" inputmode="numeric" placeholder="2008"></div>
+        <div class="f"><label>Patente</label><input id="v-dominio" class="mono" placeholder="AAA123" maxlength="10"></div>
+      </div>
+      <div class="f"><label>Motor / Versión</label><input id="v-detalle" placeholder="2.0 180 hp"></div>
+      <div class="f"><label>Foto (opcional)</label><input id="v-foto" type="file" accept="image/*"></div>
+      <div id="v-foto-prev" class="hidden" style="margin:-6px 0 14px"><button class="linkbtn" onclick="clearVehiclePhoto()">Quitar foto actual</button></div>
+      <button class="btn dark" id="btn-save-v" onclick="saveVehicle()">Guardar vehículo</button>
+      <button class="btn danger-t hidden" id="btn-del-v" onclick="deleteVehicle()" style="margin-top:8px">Eliminar vehículo</button>
+    </div>
+  </div>
+
+  <!-- SHEET: KM -->
+  <div id="sheet-km" class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-in">
+      <h2 style="margin-bottom:4px">Actualizar kilometraje</h2>
+      <p style="margin:0 0 18px;color:var(--mute);font-size:14px">Se revisarán tus alertas pendientes.</p>
+      <div class="km-input"><input id="input-km" type="number" inputmode="numeric" placeholder="0"><span>KM</span></div>
+      <button class="btn brand" onclick="saveKm()">Actualizar ahora</button>
+    </div>
+  </div>
+
+  <!-- SHEET: notas -->
+  <div id="sheet-notes" class="sheet tall">
+    <div class="grab"></div>
+    <div class="sheet-in" style="display:flex;flex-direction:column;flex:1">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="margin:0;font-size:20px">Observaciones técnicas</h2>
+        <button class="btn dark" style="width:auto;padding:9px 18px;font-size:14px" onclick="saveNotes()">Guardar</button>
+      </div>
+      <textarea id="input-notes" class="big" placeholder="Ej: Lleva 5,5 L de aceite 5W40, tuerca del cárter de 14 mm, presión de neumáticos 32 psi…"></textarea>
+    </div>
+  </div>
+
+  <!-- SHEET: service -->
+  <div id="sheet-service" class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-in">
+      <h2 id="ss-title">Registrar service</h2>
+      <span class="tlabel">¿Qué se hizo?</span>
+      <div class="catgrid" id="cat-grid"></div>
+      <div class="f"><label>Tarea realizada *</label><input id="s-tipo" placeholder="Describí el trabajo…"></div>
+      <div class="row2">
+        <div class="f"><label>KM realizado *</label><input id="s-km" type="number" inputmode="numeric"></div>
+        <div class="f"><label>Fecha *</label><input id="s-fecha" type="date"></div>
+      </div>
+      <div class="f"><label>Costo total (opcional)</label><input id="s-costo" type="number" inputmode="decimal" placeholder="$"></div>
+
+      <div class="box blue">
+        <h4>Próximo vencimiento <button class="linkbtn" onclick="suggestNext()">✨ Sugerir</button></h4>
+        <div class="row2">
+          <div class="f" style="margin:0"><label style="color:#1d4ed8">Próximo KM</label><input id="s-nextkm" type="number" inputmode="numeric" placeholder="10000"></div>
+          <div class="f" style="margin:0"><label style="color:#1d4ed8">Próxima fecha</label><input id="s-nextdate" type="date"></div>
+        </div>
+        <p class="hint">Te avisamos cuando se cumpla el km o la fecha (lo que ocurra primero).</p>
+      </div>
+
+      <div class="box gray">
+        <h4>📍 Taller / Mecánico (opcional)</h4>
+        <div class="f"><label>Nombre</label><input id="s-taller" placeholder="Taller Los Hermanos"></div>
+        <div class="row2">
+          <div class="f" style="margin:0"><label>Teléfono</label><input id="s-tel" type="tel" placeholder="1123456789"></div>
+          <div class="f" style="margin:0"><label>Enlace a Maps</label><input id="s-maps" type="url" placeholder="https://maps…"></div>
+        </div>
+      </div>
+
+      <div class="f"><label>Notas del service</label><input id="s-notas" placeholder="Repuestos usados, marca, garantía…"></div>
+      <div class="f"><label>Comprobante (foto / PDF, máx. 3 MB)</label><input id="s-adjunto" type="file" accept="image/*,.pdf"></div>
+      <button class="btn dark" id="btn-save-s" onclick="saveService()"><span id="s-btn-text">Guardar service</span></button>
+    </div>
+  </div>
+
+  <!-- SHEET: ajustes -->
+  <div id="sheet-settings" class="sheet" style="background:#f8fafc">
+    <div class="grab"></div>
+    <div class="sheet-in">
+      <h2>Ajustes</h2>
+      <div class="group">
+        <button class="setrow" onclick="toggleNotif()">
+          <div class="l"><div class="ico" style="background:#fef3c7">🔔</div><div><b>Avisos de vencimientos</b><small>Notificación antes de cada fecha</small></div></div>
+          <div class="sw" id="sw-notif"></div>
+        </button>
+      </div>
+      <div class="group">
+        <button class="setrow" onclick="checkUpdate(true)">
+          <div class="l"><div class="ico" style="background:#ede9fe">🔄</div><div><b>Buscar actualización</b><small id="upd-status">Versión</small></div></div>
+        </button>
+      </div>
+      <div class="group">
+        <button class="setrow" onclick="exportData()">
+          <div class="l"><div class="ico" style="background:#dcfce7">⬇️</div><div><b>Crear respaldo</b><small>Guardá o compartí un archivo .json</small></div></div>
+        </button>
+        <button class="setrow" onclick="document.getElementById('import-file').click()">
+          <div class="l"><div class="ico" style="background:#dbeafe">⬆️</div><div><b>Cargar respaldo</b><small>Recuperar desde un archivo .json</small></div></div>
+        </button>
+        <input type="file" id="import-file" accept=".json,application/json" class="hidden" onchange="importData(event)">
+      </div>
+      <button class="btn danger-t" onclick="confirmClear()">Borrar todos los datos</button>
+      <p class="about" id="about-ver">MotorLog · Tus datos quedan solo en este teléfono</p>
+    </div>
+  </div>
+
+  <!-- Comprobante -->
+  <div id="modal-att" class="hidden">
+    <div class="top"><span id="att-title">Comprobante</span><button class="icon-btn" onclick="closeAttachment()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"><path d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+    <div id="att-body"></div>
+    <div class="bot"><a id="att-dl" href="#" download>Descargar comprobante</a></div>
+  </div>
+
+  <!-- Diálogo -->
+  <div id="dialog" class="hidden">
+    <div class="in">
+      <h3 id="dlg-title">Atención</h3>
+      <p id="dlg-msg"></p>
+      <button class="btn dark" id="dlg-ok">Aceptar</button>
+      <button class="btn hidden" id="dlg-cancel" style="color:var(--mute)">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
