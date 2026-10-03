@@ -184,7 +184,7 @@ function resetForm(id) {
     selClase = 'auto'; renderTypeGrid();
   } else if (id === 'sheet-service') {
     editingServiceId = null;
-    ['s-tipo', 's-km', 's-costo', 's-nextkm', 's-nextdate', 's-adjunto', 's-taller', 's-tel', 's-maps', 's-notas'].forEach(i => $(i).value = '');
+    ['s-tipo', 's-km', 's-costo', 's-nextkm', 's-nextdate', 's-adjunto', 's-taller', 's-dir', 's-tel', 's-maps', 's-notas'].forEach(i => $(i).value = '');
     $('ss-title').textContent = 'Registrar service'; $('s-btn-text').textContent = 'Guardar service';
     lastAutoLabel = '';
   }
@@ -276,10 +276,11 @@ function renderTimeline(v) {
     const c = catById(h.cat);
     const nextParts = [h.kmProximo ? nf(h.kmProximo) + ' KM' : null, h.fechaProxima ? fmtDate(h.fechaProxima) : null].filter(Boolean);
     let taller = '';
-    if (h.taller || h.telefono || h.enlaceMaps) {
-      taller = `<div class="tl-taller">${h.taller ? `<p>🏭 ${esc(h.taller)}</p>` : ''}<div class="mini-links">` +
+    if (h.taller || h.telefono || h.enlaceMaps || h.direccion) {
+      taller = `<div class="tl-taller">${h.taller ? `<p>🏭 ${esc(h.taller)}</p>` : ''}` +
+        (h.direccion ? `<p class="tl-addr">📍 ${esc(h.direccion)}</p>` : '') + `<div class="mini-links">` +
         (h.telefono ? `<a href="tel:${esc(h.telefono)}">📞 Llamar</a>` : '') +
-        (h.enlaceMaps ? `<a class="map" href="${esc(h.enlaceMaps)}" target="_blank" rel="noopener">📍 Maps</a>` : '') + `</div></div>`;
+        (mapsTarget(h) ? `<button class="map" onclick="openMaps('${h.id}')">🗺️ Maps</button>` : '') + `</div></div>`;
     }
     return `<div class="tl"><div class="tl-card">
       <div class="tl-act">
@@ -384,7 +385,7 @@ function openEditService(id) {
   editingServiceId = id; selCat = h.cat; lastAutoLabel = '';
   $('s-tipo').value = h.tipo || ''; $('s-km').value = h.kmRealizado || ''; $('s-fecha').value = h.fecha || '';
   $('s-costo').value = h.costo || ''; $('s-nextkm').value = h.kmProximo || ''; $('s-nextdate').value = h.fechaProxima || '';
-  $('s-taller').value = h.taller || ''; $('s-tel').value = h.telefono || ''; $('s-maps').value = h.enlaceMaps || ''; $('s-notas').value = h.notas || '';
+  $('s-taller').value = h.taller || ''; $('s-dir').value = h.direccion || ''; $('s-tel').value = h.telefono || ''; $('s-maps').value = h.enlaceMaps || ''; $('s-notas').value = h.notas || '';
   $('ss-title').textContent = 'Editar service'; $('s-btn-text').textContent = 'Guardar cambios';
   renderCatGrid(); openSheet('sheet-service');
 }
@@ -415,7 +416,7 @@ async function saveService() {
       cat: selCat, tipo, kmRealizado: km, fecha,
       kmProximo: isNaN(nextKm) ? null : nextKm, fechaProxima: $('s-nextdate').value || null,
       costo: parseFloat($('s-costo').value) || 0,
-      taller: $('s-taller').value.trim(), telefono: $('s-tel').value.trim(), enlaceMaps: $('s-maps').value.trim(), notas: $('s-notas').value.trim(),
+      taller: $('s-taller').value.trim(), direccion: $('s-dir').value.trim(), telefono: $('s-tel').value.trim(), enlaceMaps: $('s-maps').value.trim(), notas: $('s-notas').value.trim(),
     };
     if (editingServiceId) {
       const h = v.historial.find(x => x.id === editingServiceId);
@@ -690,6 +691,7 @@ async function buildReportPdf(v) {
       const extra = [];
       if (pdfSafe(c.label).toLowerCase() !== pdfSafe(h.tipo).toLowerCase()) extra.push({ t: c.label, c: PC.soft });
       if (h.taller || h.telefono) wrap('Taller: ' + [h.taller, h.telefono].filter(Boolean).join(' · '), dW).forEach(t => extra.push({ t, c: PC.mute }));
+      if (h.direccion) wrap('Dirección: ' + h.direccion, dW).forEach(t => extra.push({ t, c: PC.mute }));
       if (h.notas) wrap(h.notas, dW).forEach(t => extra.push({ t, c: PC.mute }));
       const nxt = [];
       if (h.kmProximo) nxt.push(nf(h.kmProximo) + ' km');
@@ -804,10 +806,34 @@ async function httpGetJson(url) {
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
-function openExternal(url) {
+// Abre un enlace FUERA de la app (Maps, navegador, descarga del APK).
+// Nunca navega dentro de MotorLog: eso era lo que reiniciaba la app.
+async function openExternal(url) {
   const AP = plug('App');
-  try { if (AP && AP.openUrl) { AP.openUrl({ url }); return; } } catch (e) {}
-  window.open(url, '_blank');
+  if (isNative()) {
+    try {
+      if (!AP || !AP.openUrl) throw new Error('sin plugin');
+      const r = await AP.openUrl({ url });
+      if (r && r.completed === false) throw new Error('nadie puede abrirlo');
+      return true;
+    } catch (e) { showToast('No se pudo abrir el enlace', 'error'); return false; }
+  }
+  window.open(url, '_blank', 'noopener');
+  return true;
+}
+
+// Arma el destino de "Maps" con lo que haya cargado: un enlace, un código de Google (Plus Code) o una dirección escrita a mano.
+function mapsTarget(h) {
+  const link = (h.enlaceMaps || '').trim(), dir = (h.direccion || '').trim();
+  if (/^https?:\/\//i.test(link)) return link;
+  if (/^(www\.|maps\.app\.goo\.gl|goo\.gl\/maps|maps\.google\.|google\.[a-z.]+\/maps)/i.test(link)) return 'https://' + link;
+  const q = dir || link;
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}
+function openMaps(id) {
+  const v = curV(); const h = v && v.historial.find(x => x.id === id);
+  const url = h && mapsTarget(h);
+  if (url) openExternal(url);
 }
 
 async function checkUpdate(manual) {

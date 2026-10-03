@@ -150,7 +150,8 @@ input,textarea,select{font:inherit;color:inherit}
 .tl-taller p{margin:0 0 6px;font-size:12px;font-weight:700;color:var(--ink2)}
 .mini-links{display:flex;gap:8px;flex-wrap:wrap}
 .mini-links a,.mini-links button{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;padding:6px 10px;border-radius:9px;background:#f1f5f9;border:1px solid var(--line);color:var(--ink2);text-decoration:none}
-.mini-links a.map{background:var(--brand-50);color:var(--brand-d);border-color:var(--brand-100)}
+.mini-links a.map,.mini-links button.map{background:var(--brand-50);color:var(--brand-d);border-color:var(--brand-100)}
+.tl-taller p.tl-addr{font-weight:600;color:var(--mute)}
 .mini-links button.att{background:var(--ink);color:#fff;border-color:var(--ink)}
 .tl-act{position:absolute;top:8px;right:8px;display:flex;gap:2px}
 .tl-act button{width:30px;height:30px;color:#cbd5e1;display:flex;align-items:center;justify-content:center;border-radius:8px}
