@@ -155,21 +155,72 @@ function showToast(msg, type = 'info') {
   $('app').appendChild(t);
   setTimeout(() => { t.classList.add('leave'); setTimeout(() => t.remove(), 300); }, 2400);
 }
-let dlgOnClose = null;
-function showDialog(title, msg, onConfirm, okLabel) {
+// Diálogo único de la app: aviso, confirmación, o pedido de un dato (con campo de texto).
+let dlgTimer = null;
+function askDialog(o) {
   vibrate();
-  $('dlg-title').textContent = title; $('dlg-msg').textContent = msg;
-  const ok = $('dlg-ok'), cancel = $('dlg-cancel');
-  ok.textContent = okLabel || (onConfirm ? 'Confirmar' : 'Aceptar');
-  ok.onclick = () => { closeDialog(); if (onConfirm) onConfirm(); };
-  cancel.classList.toggle('hidden', !onConfirm);
-  cancel.onclick = closeDialog;
-  $('dialog').classList.remove('hidden');
-  requestAnimationFrame(() => requestAnimationFrame(() => $('dialog').classList.add('on')));
+  clearTimeout(dlgTimer);
+  const d = $('dialog'), ok = $('dlg-ok'), cancel = $('dlg-cancel'), alt = $('dlg-alt'), inp = $('dlg-input'), msg = $('dlg-msg');
+  $('dlg-title').textContent = o.title || 'Atención';
+  msg.textContent = o.msg || ''; msg.classList.toggle('left', !!o.left);
+  ok.textContent = o.okLabel || 'Aceptar';
+  ok.className = 'btn ' + (o.danger ? 'red' : 'dark');
+  cancel.textContent = o.cancelLabel || 'Cancelar';
+  cancel.classList.toggle('hidden', !o.cancel);
+  alt.classList.toggle('hidden', !o.alt);
+  if (o.alt) { alt.textContent = o.alt.label; alt.onclick = () => { closeDialog(); o.alt.fn(); }; }
+  const need = o.input || null;
+  inp.classList.toggle('hidden', !need);
+  const valid = () => !need || (need.match ? inp.value.trim().toUpperCase() === need.match : (!need.required || inp.value.trim().length > 0));
+  if (need) {
+    inp.value = need.value || ''; inp.placeholder = need.placeholder || ''; inp.maxLength = need.maxlength || 40;
+    inp.setAttribute('autocapitalize', need.match ? 'characters' : 'words');
+    inp.oninput = () => { ok.disabled = !valid(); };
+    inp.onkeydown = e => { if (e.key === 'Enter' && valid()) ok.click(); };
+  }
+  ok.disabled = !valid();
+  ok.onclick = () => { if (!valid()) return; const val = need ? inp.value.trim() : undefined; closeDialog(); if (o.onOk) o.onOk(val); };
+  cancel.onclick = () => { closeDialog(); if (o.onCancel) o.onCancel(); };
+  d.classList.remove('hidden');
+  requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('on')));
+  if (need) setTimeout(() => inp.focus(), 320);
+}
+function showDialog(title, msg, onConfirm, okLabel) {
+  askDialog({ title, msg, okLabel: okLabel || (onConfirm ? 'Confirmar' : 'Aceptar'), cancel: !!onConfirm,
+    danger: /^(Eliminar|Borrar)/.test(okLabel || ''), onOk: onConfirm ? () => onConfirm() : null });
 }
 function closeDialog() {
   $('dialog').classList.remove('on');
-  setTimeout(() => $('dialog').classList.add('hidden'), 250);
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  clearTimeout(dlgTimer);
+  dlgTimer = setTimeout(() => $('dialog').classList.add('hidden'), 250);
+}
+const dialogOpen = () => !$('dialog').classList.contains('hidden');
+
+// ---------------- Nombre y saludo ----------------
+const getName = () => { try { return (localStorage.getItem('ml_nombre') || '').trim(); } catch (e) { return ''; } };
+function setName(n) {
+  n = str(n, 30).replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim();
+  try { n ? localStorage.setItem('ml_nombre', n) : localStorage.removeItem('ml_nombre'); } catch (e) {}
+  renderGreeting(); updNameRow();
+}
+function renderGreeting() {
+  const t = $('home-title'); if (!t) return;
+  const n = getName();
+  t.textContent = ''; t.classList.toggle('greet', !!n);
+  if (n) { t.append('Bienvenido a tu garage,'); const sp = document.createElement('span'); sp.className = 'hname'; sp.textContent = n; t.append(sp); }
+  else t.textContent = 'Mi Garage';
+}
+function updNameRow() { const el = $('name-status'); if (el) el.textContent = getName() || 'Sin nombre'; }
+function askName(first) {
+  askDialog({
+    title: first ? '¡Bienvenido a MotorLog! 👋' : 'Tu nombre',
+    msg: first ? '¿Cómo te llamás? Lo usamos para saludarte en tu garage.' : 'Así te saluda la app en la pantalla principal. Dejalo vacío para quitarlo.',
+    input: { placeholder: 'Tu nombre', value: getName(), maxlength: 30, required: first },
+    okLabel: first ? 'Empezar' : 'Guardar', cancel: true, cancelLabel: first ? 'Ahora no' : 'Cancelar',
+    onOk: v => { setName(v); if (v) showToast(`¡Hola, ${v}!`, 'success'); },
+    onCancel: () => { if (first) { try { localStorage.setItem('ml_nombre_omitido', '1'); } catch (e) {} } },
+  });
 }
 
 function navigate(view) {
@@ -197,6 +248,7 @@ function openSheet(id) {
   $(id).classList.add('open');
   requestAnimationFrame(() => { if (inner) inner.scrollTop = 0; });
   activeSheet = id;
+  if (id === 'sheet-settings') updNameRow();
   if (id === 'sheet-settings') $('sw-notif').classList.toggle('on', localStorage.getItem('ml_notif') === '1');
 }
 function closeSheet() {
@@ -227,6 +279,7 @@ function resetForm(id) {
 function thumbHtml(v) { return v.foto && DATA_IMG.test(v.foto) ? `<img src="${esc(v.foto)}" alt="">` : typeSvg(v.clase); }
 
 function renderGarage() {
+  renderGreeting();
   const list = $('vehicle-list');
   let red = 0, amb = 0;
   vehicles.forEach(v => { const c = counts(v); red += c.red; amb += c.amb; });
@@ -533,7 +586,8 @@ function closeAttachment() { const m = $('modal-att'); m.classList.remove('on');
 // ---------------- Respaldo ----------------
 async function exportData() {
   if (!vehicles.length) return showToast('No hay datos para respaldar', 'error');
-  const ok = await shareFile(`MotorLog_respaldo_${isoDate(new Date())}.json`, JSON.stringify(vehicles), 'application/json');
+  const backup = { app: 'MotorLog', formato: 2, exportado: new Date().toISOString(), perfil: { nombre: getName() }, vehicles };
+  const ok = await shareFile(`MotorLog_respaldo_${isoDate(new Date())}.json`, JSON.stringify(backup), 'application/json');
   if (ok) showToast('Respaldo listo', 'success');
 }
 function importData(e) {
@@ -543,13 +597,15 @@ function importData(e) {
   fr.onload = async ev => {
     try {
       let data = JSON.parse(ev.target.result);
-      if (data && Array.isArray(data.vehicles)) data = data.vehicles;
+      let perfil = null;
+      if (data && Array.isArray(data.vehicles)) { perfil = data.perfil; data = data.vehicles; }
       if (!Array.isArray(data)) throw new Error('formato');
       for (const raw of data.slice(0, 500)) {
         if (!raw || typeof raw !== 'object') continue;
         const v = normalize(raw); await DB.put(v);
         const i = vehicles.findIndex(x => x.id === v.id); if (i >= 0) vehicles[i] = v; else vehicles.push(v);
       }
+      if (perfil && typeof perfil.nombre === 'string' && perfil.nombre.trim() && !getName()) setName(perfil.nombre);
       closeSheet(); navigate('home'); showToast('Datos restaurados', 'success'); scheduleNotifications();
     } catch (err) { showDialog('Error', 'El archivo no es un respaldo válido de MotorLog.'); }
     e.target.value = '';
@@ -557,9 +613,25 @@ function importData(e) {
   fr.readAsText(file);
 }
 function confirmClear() {
-  showDialog('Borrar TODO', 'Se eliminarán todos los vehículos y services de este teléfono. Es irreversible.', async () => {
-    await DB.clear(); vehicles = []; closeSheet(); navigate('home'); showToast('Datos borrados', 'info'); scheduleNotifications();
-  }, 'Borrar todo');
+  const nv = vehicles.length, ns = vehicles.reduce((a, v) => a + v.historial.length, 0);
+  if (!nv && !getName()) return showToast('No hay datos para borrar', 'info');
+  askDialog({
+    title: '⚠️ ¿Borrar todos los datos?',
+    msg: `Se van a eliminar de este teléfono:\n• ${nv} vehículo${nv !== 1 ? 's' : ''} y ${ns} service${ns !== 1 ? 's' : ''}\n• fotos, comprobantes y observaciones\n• tu nombre\n\nNo se puede deshacer. Te recomendamos crear un respaldo antes.`,
+    left: true, okLabel: 'Continuar', danger: true, cancel: true,
+    alt: nv ? { label: '⬇️ Crear respaldo primero', fn: () => exportData() } : null,
+    onOk: () => setTimeout(() => askDialog({
+      title: 'Última confirmación',
+      msg: 'Para borrar todo, escribí BORRAR en el recuadro.',
+      input: { placeholder: 'BORRAR', match: 'BORRAR', maxlength: 10 },
+      okLabel: 'Borrar todo definitivamente', danger: true, cancel: true,
+      onOk: async () => {
+        await DB.clear(); vehicles = [];
+        setName(''); try { localStorage.removeItem('ml_nombre_omitido'); } catch (e) {}
+        closeSheet(); navigate('home'); showToast('Datos borrados', 'info'); scheduleNotifications();
+      },
+    }), 300),
+  });
 }
 
 // ---------------- Reporte en PDF ----------------
@@ -629,6 +701,7 @@ async function buildReportPdf(v) {
   color([255, 255, 255]); font('bold', 21); doc.text('MotorLog', M, 15);
   color([147, 197, 253]); font('normal', 10); doc.text('Historial de mantenimiento', M, 22);
   color([203, 213, 225]); font('normal', 8.5); doc.text('Generado el ' + new Date().toLocaleDateString('es-AR'), W - M, 15, { align: 'right' });
+  if (getName()) doc.text('Titular: ' + pdfSafe(getName()), W - M, 21, { align: 'right' });
 
   // ---- Vehículo
   let y = 40;
@@ -916,7 +989,7 @@ async function checkUpdate(manual) {
     setUpdStatus(`Hay una versión nueva: ${info.version}`);
     // En el chequeo automático no se vuelve a insistir con una versión que ya se rechazó.
     if (!manual && localStorage.getItem('ml_upd_skip') === String(info.build)) return;
-    if (!manual && activeSheet) return;
+    if (!manual && (activeSheet || dialogOpen())) return;
     const live = !!(Number(info.minNative || 1) <= Number(CFG.NATIVE_API) && plug('CapacitorUpdater'));
     const body = (info.notes ? info.notes + '\n\n' : '') + '🔒 Actualización verificada con tu firma.\n' +
       (live ? 'Se descarga en unos segundos y la app se reinicia sola. Tus datos no se tocan.'
@@ -989,7 +1062,11 @@ async function init() {
     });
   } catch (e) {}
 
-  setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 750); }, 2500);
+  setTimeout(() => {
+    $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 750);
+    let omitted = false; try { omitted = localStorage.getItem('ml_nombre_omitido') === '1'; } catch (e) {}
+    if (!getName() && !omitted) setTimeout(() => { if (!dialogOpen()) askName(true); }, 450);
+  }, 2500);
   scheduleNotifications();
   setTimeout(() => checkUpdate(false), 4500);
 }

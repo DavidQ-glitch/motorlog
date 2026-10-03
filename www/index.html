@@ -26,7 +26,7 @@
     <header class="hero">
       <div class="hero-row">
         <div>
-          <h1>Mi Garage</h1>
+          <h1 id="home-title">Mi Garage</h1>
           <p id="home-sub">Cargando…</p>
         </div>
         <button class="icon-btn" onclick="openSheet('sheet-settings')" aria-label="Ajustes">
@@ -162,7 +162,7 @@
         <div class="f"><label>Dirección</label><input id="s-dir" placeholder="Calle 7 n.º 1234, La Plata" autocomplete="off"></div>
         <div class="row2">
           <div class="f" style="margin:0"><label>Teléfono</label><input id="s-tel" type="tel" placeholder="1123456789"></div>
-          <div class="f" style="margin:0"><label>Enlace o código de Maps</label><input id="s-maps" type="text" inputmode="url" autocapitalize="off" placeholder="Pegá el enlace"></div>
+          <div class="f" style="margin:0"><label>Link de Maps</label><input id="s-maps" type="text" inputmode="url" autocapitalize="off" placeholder="Link o código"></div>
         </div>
       </div>
 
@@ -181,6 +181,11 @@
         <button class="setrow" onclick="toggleNotif()">
           <div class="l"><div class="ico" style="background:#fef3c7">🔔</div><div><b>Avisos de vencimientos</b><small>Notificación antes de cada fecha</small></div></div>
           <div class="sw" id="sw-notif"></div>
+        </button>
+      </div>
+      <div class="group">
+        <button class="setrow" onclick="askName(false)">
+          <div class="l"><div class="ico" style="background:#e0e7ff">👤</div><div><b>Tu nombre</b><small id="name-status">Sin nombre</small></div></div>
         </button>
       </div>
       <div class="group">
@@ -214,7 +219,9 @@
     <div class="in">
       <h3 id="dlg-title">Atención</h3>
       <p id="dlg-msg"></p>
+      <input id="dlg-input" class="dlg-input hidden" autocomplete="off" spellcheck="false">
       <button class="btn dark" id="dlg-ok">Aceptar</button>
+      <button class="btn soft hidden" id="dlg-alt"></button>
       <button class="btn hidden" id="dlg-cancel" style="color:var(--mute)">Cancelar</button>
     </div>
   </div>
