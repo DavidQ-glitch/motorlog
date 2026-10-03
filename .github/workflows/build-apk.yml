@@ -63,7 +63,17 @@ jobs:
 
       - name: Compilar APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set +e
+          ./gradlew assembleDebug --no-daemon --stacktrace > ../gradle.log 2>&1
+          CODE=$?
+          if [ $CODE -ne 0 ]; then
+            # Muestra el motivo del error como anotación (se ve en la página de la ejecución)
+            MSG=$( (grep -E -A14 "What went wrong|error:|Execution failed" ../gradle.log | head -n 45) | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Falló Gradle::${MSG}"
+            tail -n 60 ../gradle.log
+          fi
+          exit $CODE
 
       - name: Preparar archivos de la actualización
         run: |
