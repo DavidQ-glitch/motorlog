@@ -50,6 +50,15 @@ jobs:
       - name: Crear proyecto Android
         run: npx cap add android
 
+      - name: Ajustar herramientas de Android (el plugin de actualizaciones las necesita)
+        run: |
+          sed -i "s/compileSdkVersion = 34/compileSdkVersion = 35/" android/variables.gradle
+          sed -i "s#com.android.tools.build:gradle:8.2.1#com.android.tools.build:gradle:8.7.2#" android/build.gradle
+          sed -i "s#gradle-8.2.1-all.zip#gradle-8.9-all.zip#" android/gradle/wrapper/gradle-wrapper.properties
+          grep -nE "compileSdkVersion|targetSdkVersion" android/variables.gradle
+          grep -n "com.android.tools.build:gradle" android/build.gradle
+          grep -n distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Generar íconos y pantalla de inicio
         run: npx capacitor-assets generate --android
 
