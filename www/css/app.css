@@ -256,3 +256,20 @@ textarea.big{width:100%;flex:1;min-height:240px;padding:16px;border-radius:16px;
 #dialog p.left{text-align:left}
 .btn.red{background:var(--red);color:#fff}
 .btn:disabled{opacity:.35;pointer-events:none}
+
+/* ---------- Términos y condiciones ---------- */
+#splash p.splash-copy{animation:up 1s .9s both cubic-bezier(.2,.8,.2,1);position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);margin:0;text-align:center;font-size:10.5px;font-weight:600;color:rgba(191,219,254,.75);padding:0 16px}
+.terms-sheet{height:92dvh}
+.terms-head{padding:6px 22px 10px;border-bottom:1px solid var(--line);flex-shrink:0}
+.terms-head h2{margin:0;font-size:21px}
+.terms-head p{margin:3px 0 0;font-size:12px;font-weight:700;color:var(--mute)}
+.terms-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 22px 18px;color:var(--ink2)}
+.terms-body h3{margin:18px 0 6px;font-size:14.5px;font-weight:800;color:var(--ink)}
+.terms-body h3:first-child{margin-top:4px}
+.terms-body p{margin:0 0 8px;font-size:13.5px;line-height:1.55}
+.terms-body p.li{padding-left:16px;text-indent:-12px}
+.terms-body .copy{margin-top:18px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;font-weight:700;color:var(--mute);text-align:center}
+.terms-foot{flex-shrink:0;padding:12px 22px calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:#fff}
+.terms-foot .btn{margin-top:8px}
+.chk{display:flex;align-items:flex-start;gap:10px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;line-height:1.35}
+.chk input{width:22px;height:22px;margin:0;flex-shrink:0;accent-color:var(--brand)}

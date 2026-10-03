@@ -197,6 +197,62 @@ function closeDialog() {
 }
 const dialogOpen = () => !$('dialog').classList.contains('hidden');
 
+// ---------------- Términos y condiciones ----------------
+const TYC = window.ML_TYC || { version: '0', secciones: [] };
+let termsMode = 'view', termsDone = null;
+function tycRecord() { try { return JSON.parse(localStorage.getItem('ml_tyc') || 'null'); } catch (e) { return null; } }
+const tycAccepted = () => { const r = tycRecord(); return !!(r && r.version === TYC.version); };
+function renderTerms() {
+  const body = $('terms-body'); if (!body || body.childElementCount) return;
+  $('terms-ver').textContent = `Versión ${TYC.version} · vigente desde ${fmtDateLong(TYC.vigencia)} · Titular: ${TYC.titular}`;
+  for (const sec of TYC.secciones) {
+    const h = document.createElement('h3'); h.id = 'tyc-' + sec.id; h.textContent = sec.t; body.appendChild(h);
+    for (const txt of sec.p) {
+      const p = document.createElement('p'); p.textContent = txt;
+      if (/^([a-j]\)|•) /.test(txt)) p.className = 'li';
+      body.appendChild(p);
+    }
+  }
+  const c = document.createElement('p'); c.className = 'copy'; c.textContent = TYC.copyright + ' · ' + TYC.email; body.appendChild(c);
+}
+function updTycRow() {
+  const el = $('tyc-status'); if (!el) return; const r = tycRecord();
+  el.textContent = r && r.version === TYC.version ? `Versión ${TYC.version} · aceptados el ${fmtDateLong(r.fecha.slice(0, 10))}` : `Versión ${TYC.version}`;
+}
+function openTerms(mode, done, sectionId) {
+  renderTerms();
+  termsMode = mode; termsDone = done || null;
+  const acc = mode === 'accept';
+  $('terms-accept').classList.toggle('hidden', !acc);
+  $('terms-close').classList.toggle('hidden', acc);
+  const chk = $('terms-chk'), ok = $('terms-ok');
+  chk.checked = false; ok.disabled = true;
+  chk.onchange = () => { ok.disabled = !chk.checked; };
+  ok.onclick = () => {
+    if (!chk.checked) return;
+    try { localStorage.setItem('ml_tyc', JSON.stringify({ version: TYC.version, fecha: new Date().toISOString() })); } catch (e) {}
+    termsMode = 'view'; closeSheet(); updTycRow();
+    const cb = termsDone; termsDone = null; if (cb) setTimeout(cb, 420);
+  };
+  $('terms-no').onclick = () => askDialog({
+    title: 'Necesitás aceptar los términos',
+    msg: 'Para usar MotorLog tenés que aceptar los Términos y Condiciones. Si no estás de acuerdo, no uses la aplicación y desinstalala.',
+    okLabel: 'Volver a leerlos', cancel: isNative() && !!plug('App'), cancelLabel: 'Salir de la app',
+    onCancel: () => { const AP = plug('App'); if (AP && AP.exitApp) AP.exitApp(); },
+  });
+  openSheet('sheet-terms');
+  const body = $('terms-body');
+  body.scrollTop = 0;
+  if (sectionId) setTimeout(() => { const t = $('tyc-' + sectionId); if (t) body.scrollTop = t.offsetTop - body.offsetTop - 8; }, 60);
+}
+function showAbout() {
+  askDialog({
+    title: 'MotorLog ' + CFG.VERSION,
+    msg: `${TYC.copyright}\n\nObra protegida por la Ley 11.723. Prohibida su venta, reproducción, distribución o modificación sin autorización expresa y por escrito del autor.\n\nContacto: ${TYC.email}\n\nIncluye componentes de código abierto de terceros bajo sus propias licencias (MIT, MPL-2.0, Zlib, 0BSD).`,
+    okLabel: 'Cerrar', alt: { label: 'Ver términos y licencias', fn: () => openTerms('view', null, 'terceros') },
+  });
+}
+
 // ---------------- Nombre y saludo ----------------
 const getName = () => { try { return (localStorage.getItem('ml_nombre') || '').trim(); } catch (e) { return ''; } };
 function setName(n) {
@@ -212,6 +268,10 @@ function renderGreeting() {
   else t.textContent = 'Mi Garage';
 }
 function updNameRow() { const el = $('name-status'); if (el) el.textContent = getName() || 'Sin nombre'; }
+function maybeAskName() {
+  let omitted = false; try { omitted = localStorage.getItem('ml_nombre_omitido') === '1'; } catch (e) {}
+  if (!getName() && !omitted && !dialogOpen()) askName(true);
+}
 function askName(first) {
   askDialog({
     title: first ? '¡Bienvenido a MotorLog! 👋' : 'Tu nombre',
@@ -248,11 +308,12 @@ function openSheet(id) {
   $(id).classList.add('open');
   requestAnimationFrame(() => { if (inner) inner.scrollTop = 0; });
   activeSheet = id;
-  if (id === 'sheet-settings') updNameRow();
+  if (id === 'sheet-settings') { updNameRow(); updTycRow(); }
   if (id === 'sheet-settings') $('sw-notif').classList.toggle('on', localStorage.getItem('ml_notif') === '1');
 }
 function closeSheet() {
   if (!activeSheet) return;
+  if (activeSheet === 'sheet-terms' && termsMode === 'accept') return;   // hay que aceptar o rechazar
   const id = activeSheet;
   $(id).classList.remove('open');
   $('backdrop').classList.remove('on');
@@ -838,6 +899,7 @@ async function buildReportPdf(v) {
   for (let i = 1; i <= n; i++) {
     doc.setPage(i); stroke(PC.line); doc.setLineWidth(0.3); doc.line(M, H - 12, W - M, H - 12);
     color(PC.soft); font('normal', 8); doc.text(foot, M, H - 7.5); doc.text(`Página ${i} de ${n}`, W - M, H - 7.5, { align: 'right' });
+    font('normal', 6.5); doc.text(pdfSafe('Generado con MotorLog - © 2026 Jorge Gustavo David Quintana - Todos los derechos reservados'), W / 2, H - 4, { align: 'center' });
   }
   return doc.output('datauristring');
 }
@@ -1022,6 +1084,7 @@ async function init() {
   try { const U = plug('CapacitorUpdater'); if (U) U.notifyAppReady(); } catch (e) {}
   setUpdStatus(`Versión ${CFG.VERSION}`);
   { const ab = $('about-ver'); if (ab) ab.textContent = `MotorLog ${CFG.VERSION} · Tus datos quedan solo en este teléfono`; }
+  renderTerms(); updTycRow();
   $('empty-ico').innerHTML = typeSvg('auto');
   $('dl-marcas').innerHTML = MARCAS.map(m => `<option value="${esc(m)}">`).join('');
   $('v-marca').addEventListener('input', e => fillModelos(e.target.value));
@@ -1056,6 +1119,7 @@ async function init() {
     if (AP) AP.addListener('backButton', () => {
       if (!$('dialog').classList.contains('hidden')) closeDialog();
       else if (!$('modal-att').classList.contains('hidden')) closeAttachment();
+      else if (activeSheet === 'sheet-terms' && termsMode === 'accept') return;
       else if (activeSheet) closeSheet();
       else if (currentId) navigate('home');
       else AP.exitApp();
@@ -1064,8 +1128,7 @@ async function init() {
 
   setTimeout(() => {
     $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 750);
-    let omitted = false; try { omitted = localStorage.getItem('ml_nombre_omitido') === '1'; } catch (e) {}
-    if (!getName() && !omitted) setTimeout(() => { if (!dialogOpen()) askName(true); }, 450);
+    setTimeout(() => { if (!tycAccepted()) openTerms('accept', maybeAskName); else maybeAskName(); }, 450);
   }, 2500);
   scheduleNotifications();
   setTimeout(() => checkUpdate(false), 4500);

@@ -19,6 +19,7 @@
     <h1>MotorLog</h1>
     <p>Control inteligente</p>
     <div class="splash-bar"><i></i></div>
+    <p class="splash-copy">© 2026 Jorge Gustavo David Quintana · Todos los derechos reservados</p>
   </div>
 
   <!-- HOME / GARAGE -->
@@ -202,8 +203,35 @@
         </button>
         <input type="file" id="import-file" accept=".json,application/json" class="hidden" onchange="importData(event)">
       </div>
+      <div class="group">
+        <button class="setrow" onclick="openTerms('view')">
+          <div class="l"><div class="ico" style="background:#fef9c3">📜</div><div><b>Términos y condiciones</b><small id="tyc-status">Versión 1.0</small></div></div>
+        </button>
+        <button class="setrow" onclick="showAbout()">
+          <div class="l"><div class="ico" style="background:#f1f5f9">©️</div><div><b>Acerca de MotorLog</b><small>Autoría, derechos y licencias</small></div></div>
+        </button>
+      </div>
       <button class="btn danger-t" onclick="confirmClear()">Borrar todos los datos</button>
       <p class="about" id="about-ver">MotorLog · Tus datos quedan solo en este teléfono</p>
+      <p class="about">© 2026 Jorge Gustavo David Quintana · Todos los derechos reservados</p>
+    </div>
+  </div>
+
+  <!-- SHEET: términos y condiciones -->
+  <div id="sheet-terms" class="sheet terms-sheet">
+    <div class="grab"></div>
+    <div class="terms-head">
+      <h2>Términos y condiciones</h2>
+      <p id="terms-ver"></p>
+    </div>
+    <div id="terms-body" class="terms-body"></div>
+    <div class="terms-foot">
+      <div id="terms-accept" class="hidden">
+        <label class="chk"><input type="checkbox" id="terms-chk"><span>Leí y acepto los Términos y Condiciones de uso y licencia</span></label>
+        <button class="btn brand" id="terms-ok" disabled>Aceptar y continuar</button>
+        <button class="btn danger-t" id="terms-no">No acepto</button>
+      </div>
+      <button class="btn dark" id="terms-close" onclick="closeSheet()">Cerrar</button>
     </div>
   </div>
 
@@ -229,6 +257,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/vendor/jspdf.umd.min.js"></script>
+<script src="js/terminos.js"></script>
 <script src="js/data.js"></script>
 <script src="js/app.js"></script>
 </body>

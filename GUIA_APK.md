@@ -126,6 +126,12 @@ Lo que depende de vos (muy importante):
 3. **No agregues colaboradores** al repositorio salvo que confíes plenamente en ellos (Settings → Collaborators).
 4. Para quitarle el acceso a Claude cuando quieras: GitHub → Settings → Applications → Claude → elegí qué repositorios puede ver.
 
+## Términos y condiciones y derechos de autor
+
+- La app pide aceptar los **Términos y Condiciones** en el primer uso (y cada vez que cambie su versión). Se pueden releer en **Ajustes → Términos y condiciones**, y la autoría está en **Ajustes → Acerca de MotorLog**.
+- El texto vive en `www/js/terminos.js` (única fuente). Si se cambia algo, hay que **subir el número de `version`** para que la app vuelva a pedir la aceptación, y regenerar el documento con `node scripts/generar-terminos.js` (crea `TERMINOS.md`).
+- El repositorio tiene `LICENSE` (licencia propietaria, todos los derechos reservados), `TERMINOS.md` y `AVISOS_DE_TERCEROS.md` (licencias de los componentes de código abierto que usa la app).
+
 ## Alternativa: Android Studio (sin actualizaciones automáticas)
 Si preferís armar el APK en tu compu: instalá **Node.js (LTS)** y **Android Studio**, y en la carpeta del proyecto ejecutá:
 ```bash

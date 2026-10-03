@@ -1,0 +1,35 @@
+LICENCIA PROPIETARIA — TODOS LOS DERECHOS RESERVADOS
+
+MotorLog
+Copyright © 2026 Jorge Gustavo David Quintana (estudiodavidquintana@gmail.com).
+Todos los derechos reservados.
+
+Este software, su código fuente y objeto, su diseño, textos, gráficos e imágenes
+propias constituyen una obra protegida por la Ley 11.723 de Propiedad Intelectual de
+la República Argentina (art. 1, texto según Ley 25.036) y por los tratados
+internacionales aplicables (Convenio de Berna y Tratado de la OMPI sobre Derecho de
+Autor —Ley 25.140— y Acuerdo sobre los ADPIC —Ley 24.425—).
+
+NO se concede ninguna licencia de código abierto. Queda prohibido, sin autorización
+previa, expresa y por escrito del titular:
+
+  - vender, alquilar, sublicenciar, comercializar o explotar económicamente este software;
+  - copiarlo, reproducirlo, distribuirlo, publicarlo o ponerlo a disposición de terceros;
+  - modificarlo, adaptarlo, traducirlo, crear obras derivadas o integrarlo en otros programas;
+  - compilarlo o distribuir versiones propias, modificadas o no oficiales;
+  - suprimir o alterar este aviso o los avisos de autoría;
+  - eludir sus mecanismos de seguridad (firma y verificación de actualizaciones).
+
+La visibilidad de este repositorio en GitHub no implica licencia alguna, más allá de la
+mínima que los Términos de Servicio de GitHub exigen para visualizar el contenido y
+bifurcarlo ("fork") dentro de esa plataforma. Cualquier otro uso, copia o distribución,
+dentro o fuera de GitHub, está prohibido.
+
+El uso de la aplicación se rige por los Términos y Condiciones de Uso y Licencia
+(archivo TERMINOS.md), que el usuario acepta en el primer uso.
+
+Los componentes de terceros incluidos se rigen por sus propias licencias
+(archivo AVISOS_DE_TERCEROS.md); este aviso no restringe los derechos que esas
+licencias otorgan sobre dichos componentes.
+
+Solicitudes de autorización: estudiodavidquintana@gmail.com
